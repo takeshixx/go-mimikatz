@@ -40,5 +40,5 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
       with:
-          name: mk.exe
-          path: $GITHUB_WORKSPACE/mk.exe
+          name: gogokatz.exe
+          path: $GITHUB_WORKSPACE/bin/gogokatz.exe
