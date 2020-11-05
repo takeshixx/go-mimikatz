@@ -9,3 +9,4 @@ bin/
 bin/*
 resources/
 resources/*
+pkged.go
