@@ -5,3 +5,7 @@ mimi_encrypted
 mimikatz_trunk.7z
 .idea
 go-mimikatz
+bin/
+bin/*
+resources/
+resources/*
